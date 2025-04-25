@@ -1,6 +1,6 @@
 # Location Service
 
-The Location Service provides a structured way to represent and manage geographical entities and their relationships for enterprises. It is designed to handle complex location hierarchies and mappings efficiently.
+The Location Service provides a structured way to represent and manage geographical entities and their relationships for enterprises. It is designed to handle complex location hierarchies and mappings efficiently. It is primarily a read intensive service.
 
 ## Components
 
@@ -17,10 +17,8 @@ The Location Service provides a structured way to represent and manage geographi
 - **Fields:**
   - `geo_id`: Unique identifier for the location. (uuid)
   - `geo_level`: The geo level this location belongs to.
-  - `name`: Name of the location.
-  - `aliases`: Alternative names by which the location is known.
 
-### 3. Inclusion Map
+### 3. Relation
 
 - **Definition:** Represents the relationship between two locations, defining hierarchical inclusion.
 - **Fields:**
@@ -29,6 +27,13 @@ The Location Service provides a structured way to represent and manage geographi
 - **Rules:**
   - The parent location's level determines the type of relationship.
   - A child location can have a particular relation with only one parent (e.g., a state can belong to only one country).(Approach in case of a sql db, is to write a custom trigger that, on insert or update of rows in the geo_map table, performs a query joining the location table to verify that the combination of child and the parent's level is unique among all geo_map rows)
+
+### 4. Name Maps
+- **Definition:** Names including alternate ones by which the location is known.
+- **Fields:**
+  - `name`: The name of the location
+  - `geo_id`: geo_id of the location.
+  - `primary`: (bool) This indicates whether it is the primary name. One location can have only one primary name.
 
 ---
 
