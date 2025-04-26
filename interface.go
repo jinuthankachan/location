@@ -24,7 +24,7 @@ type LocationService interface {
 }
 
 type Location struct {
-	GeoID    string   `json:"geo_id"`
+	GeoID    string   `json:"geo_id"` // Location.Id is also referenced to as geo_id.
 	GeoLevel string   `json:"geo_level"`
 	Name     string   `json:"name"`    // primary name of the location
 	Aliases  []string `json:"aliases"` // aliases of the location

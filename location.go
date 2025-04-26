@@ -4,17 +4,18 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/xaults/platform/location/internal/postgres"
 	"gorm.io/gorm"
 )
 
 type ServiceOnPostgres struct {
-	db *gorm.DB
+	db postgres.Store
 }
 
 var _ LocationService = (*ServiceOnPostgres)(nil)
 
 func NewServiceOnPostgres(db *gorm.DB) (*ServiceOnPostgres, error) {
-	return &ServiceOnPostgres{db: db}, nil
+	return &ServiceOnPostgres{db: postgres.Store{DB: db}}, nil
 }
 
 // AddLocation creates a new location
