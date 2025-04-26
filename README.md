@@ -1,5 +1,7 @@
 # Location Service
 
+![coverage](https://raw.githubusercontent.com/jinuthankachan/location/badges/coverage.svg)
+
 The Location Service provides a structured way to represent and manage geographical entities and their relationships for enterprises. It is designed to handle complex location hierarchies and mappings efficiently. It is primarily a read intensive service.
 
 ## Components
