@@ -8,24 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 )
-
-func setupTestDB(t *testing.T) *Store {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-
-	// Auto migrate the required tables
-	err = db.AutoMigrate(&GeoLevel{}, &Location{})
-	require.NoError(t, err)
-
-	return &Store{DB: db}
-}
-
-func float64Ptr(v float64) *float64 {
-	return &v
-}
 
 func TestGeoLevel_InsertGeoLevel(t *testing.T) {
 	store := setupTestDB(t)
