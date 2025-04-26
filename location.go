@@ -36,8 +36,17 @@ func (service *ServiceOnPostgres) AddLocation(ctx context.Context, geoID string,
 
 // AddGeoLevel creates a new geo level
 func (service *ServiceOnPostgres) AddGeoLevel(ctx context.Context, name string, rank *float64) error {
-	_, err := service.db.InsertGeoLevel(ctx, name, rank)
-	return err
+	tx := service.db.DB.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+	store := &postgres.Store{DB: tx}
+	_, err := store.InsertGeoLevel(ctx, name, rank)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	return tx.Commit().Error
 }
 
 // AddAliasToLocation adds an alias to a location
@@ -46,7 +55,17 @@ func (service *ServiceOnPostgres) AddAliasToLocation(ctx context.Context, geoID 
 	if err != nil {
 		return err
 	}
-	return service.db.InsertNameMap(ctx, id, name, false)
+	tx := service.db.DB.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+	store := &postgres.Store{DB: tx}
+	err = store.InsertNameMap(ctx, id, name, false)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	return tx.Commit().Error
 }
 
 // AddNewParent adds a new parent to a location.
@@ -59,8 +78,17 @@ func (service *ServiceOnPostgres) AddParent(ctx context.Context, geoID string, p
 	if err != nil {
 		return err
 	}
-	_, err = service.db.InsertRelation(ctx, parentID, childID)
-	return err
+	tx := service.db.DB.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+	store := &postgres.Store{DB: tx}
+	_, err = store.InsertRelation(ctx, parentID, childID)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	return tx.Commit().Error
 }
 
 // AddNewChildren adds new children to a location.
@@ -69,17 +97,24 @@ func (service *ServiceOnPostgres) AddChildren(ctx context.Context, geoID string,
 	if err != nil {
 		return err
 	}
+	tx := service.db.DB.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+	store := &postgres.Store{DB: tx}
 	for _, child := range childGeoIDs {
 		childID, err := uuidFromString(child)
 		if err != nil {
+			tx.Rollback()
 			return err
 		}
-		_, err = service.db.InsertRelation(ctx, parentID, childID)
+		_, err = store.InsertRelation(ctx, parentID, childID)
 		if err != nil {
+			tx.Rollback()
 			return err
 		}
 	}
-	return nil
+	return tx.Commit().Error
 }
 
 // GetLocation retrieves a location by its geo ID
@@ -208,7 +243,17 @@ func (service *ServiceOnPostgres) RemoveAlias(ctx context.Context, geoID string,
 	if err != nil {
 		return err
 	}
-	return service.db.DeleteNameMap(ctx, id, name)
+	tx := service.db.DB.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+	store := &postgres.Store{DB: tx}
+	err = store.DeleteNameMap(ctx, id, name)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	return tx.Commit().Error
 }
 
 // RemoveParent removes a parent from a location
@@ -217,8 +262,6 @@ func (service *ServiceOnPostgres) RemoveParent(ctx context.Context, geoID string
 	if err != nil {
 		return err
 	}
-	// The postgres.Store.DeleteRelation expects a relation ID, not parent/child IDs.
-	// To delete a parent-child relation, we need to find the relation ID first.
 	relations, err := service.db.GetParents(ctx, childID)
 	if err != nil {
 		return err
@@ -227,11 +270,22 @@ func (service *ServiceOnPostgres) RemoveParent(ctx context.Context, geoID string
 	if err != nil {
 		return err
 	}
+	tx := service.db.DB.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+	store := &postgres.Store{DB: tx}
 	for _, rel := range relations {
 		if rel.ParentID == parentID {
-			return service.db.DeleteRelation(ctx, rel.Id)
+			err := store.DeleteRelation(ctx, rel.Id)
+			if err != nil {
+				tx.Rollback()
+				return err
+			}
+			return tx.Commit().Error
 		}
 	}
+	tx.Rollback()
 	return fmt.Errorf("relation not found for parent %s and child %s", parentGeoID, geoID)
 }
 
@@ -241,29 +295,39 @@ func (service *ServiceOnPostgres) RemoveChildren(ctx context.Context, geoID stri
 	if err != nil {
 		return err
 	}
+	tx := service.db.DB.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+	store := &postgres.Store{DB: tx}
 	for _, child := range childGeoIDs {
 		childID, err := uuidFromString(child)
 		if err != nil {
+			tx.Rollback()
 			return err
 		}
 		relations, err := service.db.GetChildren(ctx, parentID)
 		if err != nil {
+			tx.Rollback()
 			return err
 		}
 		found := false
 		for _, rel := range relations {
 			if rel.ChildID == childID {
-				if err := service.db.DeleteRelation(ctx, rel.Id); err != nil {
+				err := store.DeleteRelation(ctx, rel.Id)
+				if err != nil {
+					tx.Rollback()
 					return err
 				}
 				found = true
 			}
 		}
 		if !found {
+			tx.Rollback()
 			return fmt.Errorf("relation not found for parent %s and child %s", geoID, child)
 		}
 	}
-	return nil
+	return tx.Commit().Error
 }
 
 // DeleteLocation deletes a location by its geo ID
