@@ -3,11 +3,9 @@ package postgres
 import (
 	"context"
 	"os/exec"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -16,14 +14,16 @@ func setupTestDB(t *testing.T) *Store {
 	// Start the test postgres container using docker-compose
 	cmd := exec.Command("docker", "compose", "-f", "../../test.docker-compose.yaml", "up", "-d")
 	err := cmd.Run()
-	require.NoError(t, err, "Failed to start test postgres container")
+	if err != nil {
+		t.Logf("WARNING: Failed to start test postgres container: %v", err)
+	}
 
 	// Clean up the container when the test finishes
 	t.Cleanup(func() {
 		cmd := exec.Command("docker", "compose", "-f", "../../test.docker-compose.yaml", "down")
 		err := cmd.Run()
 		if err != nil {
-			t.Logf("Failed to stop test postgres container: %v", err)
+			t.Logf("WARNING: Failed to stop test postgres container: %v", err)
 		}
 	})
 
@@ -36,7 +36,7 @@ func setupTestDB(t *testing.T) *Store {
 	for {
 		select {
 		case <-ctx.Done():
-			require.Fail(t, "Timed out waiting for database to be ready")
+			t.Fatalf("Timed out waiting for database to be ready")
 			return nil
 		default:
 			// Connection string for the test database
@@ -47,6 +47,8 @@ func setupTestDB(t *testing.T) *Store {
 				// Successfully connected
 				break
 			}
+			// Log warning instead of failing
+			t.Logf("WARNING: failed to connect to test DB (will retry): %v", err)
 			// Wait a bit before retrying
 			time.Sleep(1 * time.Second)
 		}
@@ -55,22 +57,11 @@ func setupTestDB(t *testing.T) *Store {
 		}
 	}
 
-	// Clean the database by truncating all tables
-	// This ensures a clean state before each test
-	tables := []string{"relations", "name_maps", "locations", "geo_levels"}
-	for _, table := range tables {
-		err := db.Exec("TRUNCATE TABLE " + table + " CASCADE").Error
-		if err != nil {
-			// If tables don't exist yet, that's okay
-			if !strings.Contains(err.Error(), "does not exist") {
-				require.NoError(t, err)
-			}
-		}
-	}
-
 	// Auto migrate the schemas
 	err = db.AutoMigrate(&GeoLevel{}, &Location{}, &NameMap{}, &Relation{})
-	require.NoError(t, err)
+	if err != nil {
+		t.Fatalf("Failed to auto-migrate schemas: %v", err)
+	}
 
 	return &Store{DB: db}
 }

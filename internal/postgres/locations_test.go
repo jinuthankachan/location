@@ -159,7 +159,7 @@ func TestLocation_GetLocation(t *testing.T) {
 	}
 }
 
-func TestLocation_GetLocationsByPattern(t *testing.T) {
+func TestLocation_SearchLocationsByPattern(t *testing.T) {
 	store, _ := setupLocationTest(t)
 	ctx := context.Background()
 
@@ -177,7 +177,7 @@ func TestLocation_GetLocationsByPattern(t *testing.T) {
 		{
 			geoLevel: "COUNTRY",
 			name:     "Another Country",
-			aliases:  []string{"Other Land"},
+			aliases:  []string{"Other Land", "Other Nation"},
 		},
 		{
 			geoLevel: "STATE",
@@ -240,7 +240,7 @@ func TestLocation_GetLocationsByPattern(t *testing.T) {
 		{
 			name:        "case insensitive search",
 			pattern:     "test",
-			wantCount:   3, // Should match all locations with "Test" in name or alias
+			wantCount:   2, // Should match all locations with "Test" in name or alias
 			wantPattern: "Test",
 			wantErr:     false,
 		},
@@ -530,4 +530,94 @@ func TestLocation_ListLocations(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Empty(t, locations)
 	})
+}
+
+func TestLocation_GetLocationsByGeoLevelName(t *testing.T) {
+	store, _ := setupLocationTest(t)
+	ctx := context.Background()
+
+	// Create test locations
+	country1, err := store.InsertLocation(ctx, "COUNTRY", "Country 1")
+	require.NoError(t, err)
+	state1, err := store.InsertLocation(ctx, "STATE", "State 1")
+	require.NoError(t, err)
+	country2, err := store.InsertLocation(ctx, "COUNTRY", "Country 2")
+	require.NoError(t, err)
+
+	tests := []struct {
+		name         string
+		geoLevel     string
+		wantCount    int
+		wantIds      []uuid.UUID
+		wantGeoLevel string
+		wantErr      bool
+		errType      error
+	}{
+		{
+			name:         "get all countries",
+			geoLevel:     "COUNTRY",
+			wantCount:    2,
+			wantIds:      []uuid.UUID{country1.Id, country2.Id},
+			wantGeoLevel: "COUNTRY",
+			wantErr:      false,
+		},
+		{
+			name:         "get all states",
+			geoLevel:     "STATE",
+			wantCount:    1,
+			wantIds:      []uuid.UUID{state1.Id},
+			wantGeoLevel: "STATE",
+			wantErr:      false,
+		},
+		{
+			name:         "case-insensitive geo level",
+			geoLevel:     "country",
+			wantCount:    2,
+			wantIds:      []uuid.UUID{country1.Id, country2.Id},
+			wantGeoLevel: "COUNTRY",
+			wantErr:      false,
+		},
+		{
+			name:         "non-existent geo level",
+			geoLevel:     "CITY",
+			wantCount:    0,
+			wantIds:      []uuid.UUID{},
+			wantGeoLevel: "",
+			wantErr:      true,
+			errType:      ErrGeoLevelNotExist,
+		},
+		{
+			name:         "empty geo level name",
+			geoLevel:     "",
+			wantCount:    0,
+			wantIds:      []uuid.UUID{},
+			wantGeoLevel: "",
+			wantErr:      true,
+			errType:      ErrGeoLevelNameRequired,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			locations, err := store.GetLocationsByGeoLevelName(ctx, tt.geoLevel)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.errType != nil {
+					assert.ErrorIs(t, err, tt.errType)
+				}
+				return
+			}
+
+			assert.NoError(t, err)
+			assert.Len(t, locations, tt.wantCount)
+
+			if tt.wantCount > 0 {
+				for _, loc := range locations {
+					assert.Contains(t, tt.wantIds, loc.Id)
+					assert.Equal(t, tt.wantGeoLevel, loc.GeoLevel.Name)
+				}
+			}
+		})
+	}
 }

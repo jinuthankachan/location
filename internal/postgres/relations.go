@@ -25,6 +25,11 @@ func (Relation) TableName() string {
 
 // BeforeCreate hook validates hierarchy and enforces unique parent level constraint
 func (r *Relation) BeforeCreate(tx *gorm.DB) error {
+	// Call BaseModel's BeforeCreate to set UUID
+	if err := r.BaseModel.BeforeCreate(tx); err != nil {
+		return err
+	}
+
 	var parent, child Location
 
 	// Get parent and child with their geo levels

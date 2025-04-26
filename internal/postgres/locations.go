@@ -133,13 +133,13 @@ func (s *Store) SearchLocationsByPattern(ctx context.Context, pattern string, ge
 
 	// Find name maps matching the pattern
 	query := s.DB.WithContext(ctx).
+		Joins("JOIN locations ON locations.id = name_maps.location_id").
 		Preload("Location.GeoLevel").
-		Where("name LIKE ?", fmt.Sprintf("%%%s%%", pattern))
+		Where("LOWER(name) LIKE LOWER(?) AND locations.deleted_at IS NULL", fmt.Sprintf("%%%s%%", pattern))
 
 	// Filter by geo level if provided
 	if geoLevelID != nil {
-		query = query.Joins("JOIN locations ON locations.id = name_maps.location_id").
-			Where("locations.geo_level_id = ?", *geoLevelID)
+		query = query.Where("locations.geo_level_id = ?", *geoLevelID)
 	}
 
 	var nameMatches []NameMap
@@ -178,14 +178,103 @@ func (s *Store) SearchLocationsByPattern(ctx context.Context, pattern string, ge
 
 // UpdateLocation updates a location
 func (s *Store) UpdateLocation(ctx context.Context, id uuid.UUID, geoLevelName *string, name *string) (*Location, error) {
-	// TODO: implement
-	return nil, fmt.Errorf("not implemented")
+	var updatedLocation *Location
+
+	err := s.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Fetch the location
+		var location Location
+		if err := tx.First(&location, id).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrLocationNotFound
+			}
+			return err
+		}
+
+		// Update geo level if provided
+		if geoLevelName != nil {
+			if *geoLevelName == "" {
+				return ErrGeoLevelNameRequired
+			}
+			var geoLevel GeoLevel
+			if err := tx.Where("name = ?", strings.ToUpper(*geoLevelName)).First(&geoLevel).Error; err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					return ErrGeoLevelNotExist
+				}
+				return err
+			}
+			location.GeoLevelID = geoLevel.Id
+		}
+
+		// Update primary name if provided
+		if name != nil {
+			if *name == "" {
+				return ErrNameRequired
+			}
+			// Find the current primary name
+			var primaryNameMap NameMap
+			err := tx.Where("location_id = ? AND is_primary = ? AND deleted_at IS NULL", location.Id, true).First(&primaryNameMap).Error
+			if err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					// No primary name exists, create one
+					newPrimary := &NameMap{
+						LocationID: location.Id,
+						Name:       *name,
+						IsPrimary:  true,
+					}
+					if err := tx.Create(newPrimary).Error; err != nil {
+						return err
+					}
+				} else {
+					return err
+				}
+			} else {
+				// Update the name if it's different
+				if primaryNameMap.Name != *name {
+					primaryNameMap.Name = *name
+					if err := tx.Save(&primaryNameMap).Error; err != nil {
+						return err
+					}
+				}
+			}
+		}
+
+		// Save the location (only if changed)
+		if err := tx.Save(&location).Error; err != nil {
+			return err
+		}
+		updatedLocation = &location
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return updatedLocation, nil
 }
 
-// GetLocationByGeoLevelName returns a location by its geo level name
-func (s *Store) GetLocationByGeoLevelName(ctx context.Context, geoLevelName string) (*Location, error) {
-	// TODO: implement
-	return nil, fmt.Errorf("not implemented")
+// GetLocationsByGeoLevelName returns a location by its geo level name
+func (s *Store) GetLocationsByGeoLevelName(ctx context.Context, geoLevelName string) ([]Location, error) {
+	if geoLevelName == "" {
+		return nil, ErrGeoLevelNameRequired
+	}
+	var geoLevel GeoLevel
+	err := s.DB.WithContext(ctx).Where("name = ?", strings.ToUpper(geoLevelName)).First(&geoLevel).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrGeoLevelNotExist
+		}
+		return nil, err
+	}
+	var locations []Location
+	err = s.DB.WithContext(ctx).Preload("GeoLevel").Where("geo_level_id = ?", geoLevel.Id).Find(&locations).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrLocationNotFound
+		}
+		return nil, err
+	}
+	return locations, nil
 }
 
 // DeleteLocation deletes a location and cascades to its names and relations

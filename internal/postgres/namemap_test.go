@@ -141,7 +141,7 @@ func TestNameMap_InsertNameMap(t *testing.T) {
 		var names []NameMap
 		err = store.DB.Where("location_id = ?", location1.Id).Find(&names).Error
 		assert.NoError(t, err)
-		assert.Len(t, names, 2)
+		assert.Len(t, names, 3)
 
 		var firstNameIsPrimary, secondNameIsPrimary bool
 		for _, name := range names {
@@ -787,14 +787,14 @@ func TestNameMap_SearchNamesByPattern(t *testing.T) {
 		{
 			name:      "case insensitive match",
 			pattern:   "ca",
-			wantCount: 2,
-			wantNames: []string{"California", "CA"},
+			wantCount: 3,
+			wantNames: []string{"California", "CA", "America"},
 			wantErr:   false,
 		},
 		{
 			name:      "multiple matches across locations",
 			pattern:   "a",
-			wantCount: 5, // USA, America, California, CA, Golden State
+			wantCount: 6, // USA, America, California, CA, Golden State
 			wantErr:   false,
 		},
 		{

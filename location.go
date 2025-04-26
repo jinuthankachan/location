@@ -59,10 +59,10 @@ func (service *ServiceOnPostgres) GetLocations(ctx context.Context, geoIDs []str
 	return nil, fmt.Errorf("locations not found")
 }
 
-// GetLocationByPattern finds location matching the pattern of the name or one of the aliases
-func (service *ServiceOnPostgres) GetLocationByPattern(ctx context.Context, name string) (*Location, error) {
+// GetLocationsByPattern finds locations matching the pattern of the name or one of the aliases
+func (service *ServiceOnPostgres) GetLocationsByPattern(ctx context.Context, name string) ([]Location, error) {
 	// TODO: implement
-	return nil, fmt.Errorf("location not found")
+	return nil, fmt.Errorf("locations not found")
 }
 
 // GetAllParents returns all parents of a location

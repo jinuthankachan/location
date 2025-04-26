@@ -25,6 +25,10 @@ func (NameMap) TableName() string {
 
 // BeforeCreate hook ensures only one primary name per location
 func (nm *NameMap) BeforeCreate(tx *gorm.DB) error {
+	// Call BaseModel's BeforeCreate to set UUID
+	if err := nm.BaseModel.BeforeCreate(tx); err != nil {
+		return err
+	}
 	if nm.IsPrimary {
 		var count int64
 		if err := tx.Model(&NameMap{}).
@@ -101,9 +105,10 @@ func (s *Store) InsertNames(ctx context.Context, locationID uuid.UUID, names []s
 		return nil
 	}
 
-	nameMaps := make([]NameMap, 0, len(names))
+	// Use a slice of pointers so GORM hooks fire
+	nameMaps := make([]*NameMap, 0, len(names))
 	for _, name := range names {
-		nameMaps = append(nameMaps, NameMap{
+		nameMaps = append(nameMaps, &NameMap{
 			LocationID: locationID,
 			Name:       name,
 		})
@@ -276,7 +281,7 @@ func (s *Store) SetPrimaryName(ctx context.Context, locationID uuid.UUID, name s
 	})
 }
 
-// SearchNamesByPattern searches for location names matching a pattern
+// SearchNamesByPattern searches for location names matching a pattern (case-insensitive)
 func (s *Store) SearchNamesByPattern(ctx context.Context, pattern string) ([]NameMap, error) {
 	if pattern == "" {
 		return nil, ErrNameRequired
@@ -285,7 +290,7 @@ func (s *Store) SearchNamesByPattern(ctx context.Context, pattern string) ([]Nam
 	var names []NameMap
 	err := s.DB.WithContext(ctx).
 		Preload("Location.GeoLevel").
-		Where("name LIKE ? AND deleted_at IS NULL", fmt.Sprintf("%%%s%%", pattern)).
+		Where("LOWER(name) LIKE LOWER(?) AND deleted_at IS NULL", fmt.Sprintf("%%%s%%", pattern)).
 		Order("is_primary DESC, name ASC").
 		Find(&names).Error
 	if err != nil {
