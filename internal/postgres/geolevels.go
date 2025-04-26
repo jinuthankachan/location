@@ -9,14 +9,6 @@ import (
 	"gorm.io/gorm"
 )
 
-var (
-	ErrGeoLevelNameRequired  = errors.New("geo level name is required")
-	ErrGeoLevelNameNotUpper  = errors.New("geo level name must be uppercase")
-	ErrGeoLevelAlreadyExists = errors.New("geo level with this name already exists")
-	ErrGeoLevelNotFound      = errors.New("geo level not found")
-	ErrGeoLevelInUse         = errors.New("geo level is in use by locations and cannot be deleted")
-)
-
 type GeoLevel struct {
 	BaseModel
 	Name string   `gorm:"type:varchar(64);unique;not null;check:name = upper(name)" json:"name"`
