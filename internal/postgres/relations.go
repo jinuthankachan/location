@@ -2,23 +2,69 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
-// Relation represents the hierarchical relationship between two locations
+// Relation represents the relationship between two locations
 type Relation struct {
 	BaseModel
-	ParentLocationID uuid.UUID `gorm:"type:uuid;not null;index" json:"parent_location_id"`
-	ChildLocationID  uuid.UUID `gorm:"type:uuid;not null;index" json:"child_location_id"`
-	ParentLocation   *Location `gorm:"foreignKey:ParentLocationID;references:Id" json:"parent_location"`
-	ChildLocation    *Location `gorm:"foreignKey:ChildLocationID;references:Id" json:"child_location"`
+	ParentID uuid.UUID `gorm:"type:uuid;not null;index" json:"parent_id"`
+	ChildID  uuid.UUID `gorm:"type:uuid;not null;index" json:"child_id"`
+	Parent   Location  `gorm:"foreignKey:ParentID;references:Id;constraint:OnDelete:CASCADE" json:"parent"`
+	Child    Location  `gorm:"foreignKey:ChildID;references:Id;constraint:OnDelete:CASCADE" json:"child"`
 }
 
 // TableName returns the table name for the Relation model
 func (Relation) TableName() string {
 	return "relations"
+}
+
+// BeforeCreate hook validates hierarchy and enforces unique parent level constraint
+func (r *Relation) BeforeCreate(tx *gorm.DB) error {
+	var parent, child Location
+
+	// Get parent and child with their geo levels
+	if err := tx.Preload("GeoLevel").First(&parent, r.ParentID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrLocationNotFound
+		}
+		return err
+	}
+
+	if err := tx.Preload("GeoLevel").First(&child, r.ChildID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrLocationNotFound
+		}
+		return err
+	}
+
+	// Check ranks if both parent and child geo levels have ranks
+	if parent.GeoLevel.Rank != nil && child.GeoLevel.Rank != nil {
+		if *parent.GeoLevel.Rank >= *child.GeoLevel.Rank {
+			return ErrInvalidHierarchy
+		}
+	}
+
+	// Check for unique child-parent level combination
+	// A child can have only one parent of a particular level
+	var count int64
+	if err := tx.Model(&Relation{}).
+		Joins("JOIN locations parent ON parent.id = relations.parent_id").
+		Where("relations.child_id = ? AND parent.geo_level_id = ? AND relations.deleted_at IS NULL",
+			r.ChildID, parent.GeoLevelID).
+		Count(&count).Error; err != nil {
+		return err
+	}
+
+	if count > 0 {
+		return ErrDuplicateRelation
+	}
+
+	return nil
 }
 
 // InsertRelation inserts a new relation
