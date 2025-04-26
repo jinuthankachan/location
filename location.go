@@ -6,6 +6,8 @@ import (
 
 	"github.com/xaults/platform/location/internal/postgres"
 	"gorm.io/gorm"
+
+	"github.com/google/uuid"
 )
 
 type ServiceOnPostgres struct {
@@ -20,109 +22,308 @@ func NewServiceOnPostgres(db *gorm.DB) (*ServiceOnPostgres, error) {
 
 // AddLocation creates a new location
 func (service *ServiceOnPostgres) AddLocation(ctx context.Context, geoID string, geoLevel string, name string) (Location, error) {
-	// TODO: implement
-	return Location{}, fmt.Errorf("not implemented")
+	loc, err := service.db.InsertLocation(ctx, geoLevel, name)
+	if err != nil {
+		return Location{}, err
+	}
+	return Location{
+		GeoID:    loc.Id.String(),
+		GeoLevel: loc.GeoLevel.Name,
+		Name:     name,
+		Aliases:  []string{},
+	}, nil
 }
 
 // AddGeoLevel creates a new geo level
 func (service *ServiceOnPostgres) AddGeoLevel(ctx context.Context, name string, rank *float64) error {
-	// TODO: implement
-	return fmt.Errorf("not implemented")
+	_, err := service.db.InsertGeoLevel(ctx, name, rank)
+	return err
 }
 
 // AddAliasToLocation adds an alias to a location
 func (service *ServiceOnPostgres) AddAliasToLocation(ctx context.Context, geoID string, name string) error {
-	// TODO: implement
-	return fmt.Errorf("not implemented")
+	id, err := uuidFromString(geoID)
+	if err != nil {
+		return err
+	}
+	return service.db.InsertNameMap(ctx, id, name, false)
 }
 
 // AddNewParent adds a new parent to a location.
 func (service *ServiceOnPostgres) AddParent(ctx context.Context, geoID string, parentGeoID string) error {
-	// TODO: implement; also should validate that the parentGeoID Rank is less than the childGeoID Rank, if rank exists for both
-	return fmt.Errorf("not implemented")
+	childID, err := uuidFromString(geoID)
+	if err != nil {
+		return err
+	}
+	parentID, err := uuidFromString(parentGeoID)
+	if err != nil {
+		return err
+	}
+	_, err = service.db.InsertRelation(ctx, parentID, childID)
+	return err
 }
 
 // AddNewChildren adds new children to a location.
 func (service *ServiceOnPostgres) AddChildren(ctx context.Context, geoID string, childGeoIDs []string) error {
-	// TODO: implement; also should validate that the parentGeoID Rank is less than the childGeoID Rank, if rank exists for both
-	return fmt.Errorf("not implemented")
+	parentID, err := uuidFromString(geoID)
+	if err != nil {
+		return err
+	}
+	for _, child := range childGeoIDs {
+		childID, err := uuidFromString(child)
+		if err != nil {
+			return err
+		}
+		_, err = service.db.InsertRelation(ctx, parentID, childID)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // GetLocation retrieves a location by its geo ID
 func (service *ServiceOnPostgres) GetLocation(ctx context.Context, geoID string) (*Location, error) {
-	// TODO: implement
-	return nil, fmt.Errorf("location not found")
+	id, err := uuidFromString(geoID)
+	if err != nil {
+		return nil, err
+	}
+	loc, err := service.db.GetLocation(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return &Location{
+		GeoID:    loc.Id.String(),
+		GeoLevel: loc.GeoLevel,
+		Name:     loc.Name,
+		Aliases:  loc.Aliases,
+	}, nil
 }
 
 func (service *ServiceOnPostgres) GetLocations(ctx context.Context, geoIDs []string) ([]Location, error) {
-	// TODO: implement
-	return nil, fmt.Errorf("locations not found")
+	var locations []Location
+	for _, geoID := range geoIDs {
+		loc, err := service.GetLocation(ctx, geoID)
+		if err != nil {
+			return nil, err
+		}
+		locations = append(locations, *loc)
+	}
+	return locations, nil
 }
 
 // GetLocationsByPattern finds locations matching the pattern of the name or one of the aliases
 func (service *ServiceOnPostgres) GetLocationsByPattern(ctx context.Context, name string) ([]Location, error) {
-	// TODO: implement
-	return nil, fmt.Errorf("locations not found")
+	results, err := service.db.SearchLocationsByPattern(ctx, name, nil)
+	if err != nil {
+		return nil, err
+	}
+	var out []Location
+	for _, loc := range results {
+		out = append(out, Location{
+			GeoID:    loc.Id.String(),
+			GeoLevel: loc.GeoLevel,
+			Name:     loc.Name,
+			Aliases:  loc.Aliases,
+		})
+	}
+	return out, nil
 }
 
 // GetAllParents returns all parents of a location
 func (service *ServiceOnPostgres) GetAllParents(ctx context.Context, geoID string) ([]Location, error) {
-	// TODO: implement
-	return nil, fmt.Errorf("not implemented")
+	id, err := uuidFromString(geoID)
+	if err != nil {
+		return nil, err
+	}
+	relations, err := service.db.GetParents(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	var parents []Location
+	for _, rel := range relations {
+		if rel.Parent != nil {
+			parents = append(parents, Location{
+				GeoID:    rel.Parent.Id.String(),
+				GeoLevel: rel.Parent.GeoLevel.Name,
+				Name:     "", // Name can be loaded if needed
+				Aliases:  []string{},
+			})
+		}
+	}
+	return parents, nil
 }
 
 // GetAllChildren returns all children of a location
 func (service *ServiceOnPostgres) GetAllChildren(ctx context.Context, geoID string) ([]Location, error) {
-	// TODO: implement
-	return nil, fmt.Errorf("not implemented")
+	id, err := uuidFromString(geoID)
+	if err != nil {
+		return nil, err
+	}
+	relations, err := service.db.GetChildren(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	var children []Location
+	for _, rel := range relations {
+		if rel.Child != nil {
+			children = append(children, Location{
+				GeoID:    rel.Child.Id.String(),
+				GeoLevel: rel.Child.GeoLevel.Name,
+				Name:     "", // Name can be loaded if needed
+				Aliases:  []string{},
+			})
+		}
+	}
+	return children, nil
 }
 
 // UpdateLocation updates a location by its geo ID
 func (service *ServiceOnPostgres) UpdateLocation(ctx context.Context, geoID string, name string) (Location, error) {
-	// TODO: Implement
-	return Location{}, fmt.Errorf("not implemented")
+	id, err := uuidFromString(geoID)
+	if err != nil {
+		return Location{}, err
+	}
+	loc, err := service.db.UpdateLocation(ctx, id, nil, &name)
+	if err != nil {
+		return Location{}, err
+	}
+	return Location{
+		GeoID:    loc.Id.String(),
+		GeoLevel: loc.GeoLevel.Name,
+		Name:     name,
+		Aliases:  []string{},
+	}, nil
 }
 
 // UpdateGeoLevel updates a geo level by its name
 func (service *ServiceOnPostgres) UpdateGeoLevel(ctx context.Context, name string, rank *float64) error {
-	// TODO: Implement
-	return fmt.Errorf("not implemented")
+	_, err := service.db.UpdateGeoLevel(ctx, name, "", rank)
+	return err
 }
 
 // RemoveAlias removes an alias from a location
 func (service *ServiceOnPostgres) RemoveAlias(ctx context.Context, geoID string, name string) error {
-	// TODO: Implement
-	return fmt.Errorf("not implemented")
+	id, err := uuidFromString(geoID)
+	if err != nil {
+		return err
+	}
+	return service.db.DeleteNameMap(ctx, id, name)
 }
 
 // RemoveParent removes a parent from a location
 func (service *ServiceOnPostgres) RemoveParent(ctx context.Context, geoID string, parentGeoID string) error {
-	// TODO: Implement
-	return fmt.Errorf("not implemented")
+	childID, err := uuidFromString(geoID)
+	if err != nil {
+		return err
+	}
+	// The postgres.Store.DeleteRelation expects a relation ID, not parent/child IDs.
+	// To delete a parent-child relation, we need to find the relation ID first.
+	relations, err := service.db.GetParents(ctx, childID)
+	if err != nil {
+		return err
+	}
+	parentID, err := uuidFromString(parentGeoID)
+	if err != nil {
+		return err
+	}
+	for _, rel := range relations {
+		if rel.ParentID == parentID {
+			return service.db.DeleteRelation(ctx, rel.Id)
+		}
+	}
+	return fmt.Errorf("relation not found for parent %s and child %s", parentGeoID, geoID)
+}
+
+// RemoveChildren removes a child from a location.
+func (service *ServiceOnPostgres) RemoveChildren(ctx context.Context, geoID string, childGeoIDs []string) error {
+	parentID, err := uuidFromString(geoID)
+	if err != nil {
+		return err
+	}
+	for _, child := range childGeoIDs {
+		childID, err := uuidFromString(child)
+		if err != nil {
+			return err
+		}
+		relations, err := service.db.GetChildren(ctx, parentID)
+		if err != nil {
+			return err
+		}
+		found := false
+		for _, rel := range relations {
+			if rel.ChildID == childID {
+				if err := service.db.DeleteRelation(ctx, rel.Id); err != nil {
+					return err
+				}
+				found = true
+			}
+		}
+		if !found {
+			return fmt.Errorf("relation not found for parent %s and child %s", geoID, child)
+		}
+	}
+	return nil
 }
 
 // DeleteLocation deletes a location by its geo ID
 // This will also delete all the relations of the location
 // This will also delete all the aliases of the location
 func (service *ServiceOnPostgres) DeleteLocation(ctx context.Context, geoID string) error {
-	// TODO: Implement
-	return fmt.Errorf("not implemented")
+	id, err := uuidFromString(geoID)
+	if err != nil {
+		return err
+	}
+	return service.db.DeleteLocation(ctx, id)
 }
 
 // GetChildrenAtLevel returns the children of a location at a specific geo level.
 func (service *ServiceOnPostgres) GetChildrenAtLevel(ctx context.Context, geoID string, geoLevel string) ([]Location, error) {
-	// TODO: Implement
-	return nil, fmt.Errorf("not implemented")
+	id, err := uuidFromString(geoID)
+	if err != nil {
+		return nil, err
+	}
+	relations, err := service.db.GetChildren(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	var children []Location
+	for _, rel := range relations {
+		if rel.Child != nil && rel.Child.GeoLevel.Name == geoLevel {
+			children = append(children, Location{
+				GeoID:    rel.Child.Id.String(),
+				GeoLevel: rel.Child.GeoLevel.Name,
+				Name:     "",
+				Aliases:  []string{},
+			})
+		}
+	}
+	return children, nil
 }
 
 // GetParentAtLevel returns the parent of a location at a specific geo level.
 func (service *ServiceOnPostgres) GetParentAtLevel(ctx context.Context, geoID string, geoLevel string) (*Location, error) {
-	// TODO: Implement
-	return nil, fmt.Errorf("not implemented")
+	id, err := uuidFromString(geoID)
+	if err != nil {
+		return nil, err
+	}
+	relations, err := service.db.GetParents(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	for _, rel := range relations {
+		if rel.Parent != nil && rel.Parent.GeoLevel.Name == geoLevel {
+			return &Location{
+				GeoID:    rel.Parent.Id.String(),
+				GeoLevel: rel.Parent.GeoLevel.Name,
+				Name:     "",
+				Aliases:  []string{},
+			}, nil
+		}
+	}
+	return nil, fmt.Errorf("parent at level %s not found", geoLevel)
 }
 
-// RemoveChildren removes a child from a location.
-func (service *ServiceOnPostgres) RemoveChildren(ctx context.Context, geoID string, childGeoIDs []string) error {
-	// TODO: Implement
-	return fmt.Errorf("not implemented")
+func uuidFromString(s string) (uuid.UUID, error) {
+	return uuid.Parse(s)
 }
