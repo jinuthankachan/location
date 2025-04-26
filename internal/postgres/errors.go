@@ -17,4 +17,5 @@ var (
 	ErrGeoLevelAlreadyExists = errors.New("geo level with this name already exists")
 	ErrGeoLevelNotFound      = errors.New("geo level not found")
 	ErrGeoLevelInUse         = errors.New("geo level is in use by locations and cannot be deleted")
+	ErrRelationNotFound      = errors.New("relation not found")
 )

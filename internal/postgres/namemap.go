@@ -13,7 +13,7 @@ import (
 type NameMap struct {
 	BaseModel
 	LocationID uuid.UUID `gorm:"type:uuid;not null;index" json:"location_id"`
-	Location   Location  `gorm:"foreignKey:LocationID;references:Id;constraint:OnDelete:CASCADE" json:"location"`
+	Location   *Location `gorm:"foreignKey:LocationID;references:Id;constraint:OnDelete:CASCADE" json:"location"`
 	Name       string    `gorm:"type:varchar(255);not null" json:"name"`
 	IsPrimary  bool      `gorm:"not null;default:false" json:"is_primary"`
 }

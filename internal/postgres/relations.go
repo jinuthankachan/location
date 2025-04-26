@@ -14,8 +14,8 @@ type Relation struct {
 	BaseModel
 	ParentID uuid.UUID `gorm:"type:uuid;not null;index" json:"parent_id"`
 	ChildID  uuid.UUID `gorm:"type:uuid;not null;index" json:"child_id"`
-	Parent   Location  `gorm:"foreignKey:ParentID;references:Id;constraint:OnDelete:CASCADE" json:"parent"`
-	Child    Location  `gorm:"foreignKey:ChildID;references:Id;constraint:OnDelete:CASCADE" json:"child"`
+	Parent   *Location `gorm:"foreignKey:ParentID;references:Id;constraint:OnDelete:CASCADE" json:"parent"`
+	Child    *Location `gorm:"foreignKey:ChildID;references:Id;constraint:OnDelete:CASCADE" json:"child"`
 }
 
 // TableName returns the table name for the Relation model
@@ -69,30 +69,92 @@ func (r *Relation) BeforeCreate(tx *gorm.DB) error {
 
 // InsertRelation inserts a new relation
 func (s *Store) InsertRelation(ctx context.Context, parentLocationID uuid.UUID, childLocationID uuid.UUID) (*Relation, error) {
-	// TODO: Implement
-	return nil, fmt.Errorf("not implemented")
+	if parentLocationID == childLocationID {
+		return nil, errors.New("parent and child cannot be the same location")
+	}
+
+	relation := &Relation{
+		ParentID: parentLocationID,
+		ChildID:  childLocationID,
+	}
+
+	err := s.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// The BeforeCreate hook will handle validation
+		if err := tx.Create(relation).Error; err != nil {
+			return fmt.Errorf("failed to create relation: %w", err)
+		}
+
+		// Load parent and child relationships
+		if err := tx.Model(relation).Preload("Parent").Preload("Child").First(relation).Error; err != nil {
+			return fmt.Errorf("failed to load relation details: %w", err)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return relation, nil
 }
 
 // GetChildren returns children of a location by its location id
 func (s *Store) GetChildren(ctx context.Context, parentLocationID uuid.UUID) ([]Relation, error) {
-	// TODO: Implement
-	return nil, fmt.Errorf("not implemented")
+	var relations []Relation
+	err := s.DB.WithContext(ctx).
+		Where("parent_id = ?", parentLocationID).
+		Preload("Child.GeoLevel").
+		Preload("Parent.GeoLevel").
+		Find(&relations).Error
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get children: %w", err)
+	}
+
+	return relations, nil
 }
 
 // GetParents returns parents of a location by its location id
 func (s *Store) GetParents(ctx context.Context, childLocationID uuid.UUID) ([]Relation, error) {
-	// TODO: Implement
-	return nil, fmt.Errorf("not implemented")
+	var relations []Relation
+	err := s.DB.WithContext(ctx).
+		Where("child_id = ?", childLocationID).
+		Preload("Parent.GeoLevel").
+		Preload("Child.GeoLevel").
+		Find(&relations).Error
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get parents: %w", err)
+	}
+
+	return relations, nil
 }
 
 // DeleteRelation deletes a relation by its id
 func (s *Store) DeleteRelation(ctx context.Context, id uuid.UUID) error {
-	// TODO: Implement
-	return fmt.Errorf("not implemented")
+	result := s.DB.WithContext(ctx).Delete(&Relation{}, id)
+	if result.Error != nil {
+		return fmt.Errorf("failed to delete relation: %w", result.Error)
+	}
+
+	if result.RowsAffected == 0 {
+		return ErrRelationNotFound
+	}
+
+	return nil
 }
 
 // DeleteAllRelations deletes all relations of a location by its location id
 func (s *Store) DeleteAllRelations(ctx context.Context, locationID uuid.UUID) error {
-	// TODO: Implement
-	return fmt.Errorf("not implemented")
+	// Delete all relations where the location is either parent or child
+	err := s.DB.WithContext(ctx).
+		Where("parent_id = ? OR child_id = ?", locationID, locationID).
+		Delete(&Relation{}).Error
+
+	if err != nil {
+		return fmt.Errorf("failed to delete location relations: %w", err)
+	}
+
+	return nil
 }
