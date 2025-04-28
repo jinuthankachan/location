@@ -105,17 +105,17 @@ func (s *Store) GetGeoLevelByName(ctx context.Context, name string) (*GeoLevel, 
 }
 
 // UpdateGeoLevel updates a geo level by its name
-func (s *Store) UpdateGeoLevel(ctx context.Context, name string, newName string, newRank *float64) (*GeoLevel, error) {
+func (s *Store) UpdateGeoLevel(ctx context.Context, name string, newName *string, newRank *float64) (*GeoLevel, error) {
 	if name == "" {
 		return nil, ErrGeoLevelNameRequired
 	}
 
 	// Convert names to uppercase for consistent operations
 	name = strings.ToUpper(name)
-	if newName != "" {
-		newName = strings.ToUpper(newName)
+	if newName != nil {
+		*newName = strings.ToUpper(*newName)
 		// Check if newName is properly uppercase
-		if newName != strings.ToUpper(newName) {
+		if *newName != strings.ToUpper(*newName) {
 			return nil, ErrGeoLevelNameNotUpper
 		}
 	}
@@ -131,15 +131,15 @@ func (s *Store) UpdateGeoLevel(ctx context.Context, name string, newName string,
 		}
 
 		// If new name is provided and different, check it doesn't exist
-		if newName != "" && newName != name {
+		if newName != nil && *newName != name {
 			var count int64
-			if err := tx.Model(&GeoLevel{}).Where("name = ?", newName).Count(&count).Error; err != nil {
+			if err := tx.Model(&GeoLevel{}).Where("name = ?", *newName).Count(&count).Error; err != nil {
 				return err
 			}
 			if count > 0 {
 				return ErrGeoLevelAlreadyExists
 			}
-			geoLevel.Name = newName
+			geoLevel.Name = *newName
 		}
 
 		if newRank != nil {

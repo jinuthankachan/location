@@ -3,6 +3,7 @@ package location
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/xaults/platform/location/internal/postgres"
 	"gorm.io/gorm"
@@ -36,7 +37,7 @@ func (service *ServiceOnPostgres) AddLocation(ctx context.Context, geoID string,
 
 // AddGeoLevel creates a new geo level
 func (service *ServiceOnPostgres) AddGeoLevel(ctx context.Context, name string, rank *float64) error {
-	tx := service.db.DB.Begin()
+	tx := service.db.Begin()
 	if tx.Error != nil {
 		return tx.Error
 	}
@@ -55,7 +56,7 @@ func (service *ServiceOnPostgres) AddAliasToLocation(ctx context.Context, geoID 
 	if err != nil {
 		return err
 	}
-	tx := service.db.DB.Begin()
+	tx := service.db.Begin()
 	if tx.Error != nil {
 		return tx.Error
 	}
@@ -78,7 +79,7 @@ func (service *ServiceOnPostgres) AddParent(ctx context.Context, geoID string, p
 	if err != nil {
 		return err
 	}
-	tx := service.db.DB.Begin()
+	tx := service.db.Begin()
 	if tx.Error != nil {
 		return tx.Error
 	}
@@ -97,7 +98,7 @@ func (service *ServiceOnPostgres) AddChildren(ctx context.Context, geoID string,
 	if err != nil {
 		return err
 	}
-	tx := service.db.DB.Begin()
+	tx := service.db.Begin()
 	if tx.Error != nil {
 		return tx.Error
 	}
@@ -135,6 +136,8 @@ func (service *ServiceOnPostgres) GetLocation(ctx context.Context, geoID string)
 	}, nil
 }
 
+// GetLocations retrieves multiple locations by their geo IDs
+// TODO: Optimise: Use batch query
 func (service *ServiceOnPostgres) GetLocations(ctx context.Context, geoIDs []string) ([]Location, error) {
 	var locations []Location
 	for _, geoID := range geoIDs {
@@ -166,6 +169,7 @@ func (service *ServiceOnPostgres) GetLocationsByPattern(ctx context.Context, nam
 }
 
 // GetAllParents returns all parents of a location
+// TODO: Optimise: Use Join queries
 func (service *ServiceOnPostgres) GetAllParents(ctx context.Context, geoID string) ([]Location, error) {
 	id, err := uuidFromString(geoID)
 	if err != nil {
@@ -178,11 +182,24 @@ func (service *ServiceOnPostgres) GetAllParents(ctx context.Context, geoID strin
 	var parents []Location
 	for _, rel := range relations {
 		if rel.Parent != nil {
+			var primaryName string
+			var aliases []string
+			names, err := service.db.GetNameMapByLocationID(ctx, rel.ParentID)
+			if err != nil {
+				return nil, err
+			}
+			for _, name := range names {
+				if name.IsPrimary {
+					primaryName = name.Name
+				} else {
+					aliases = append(aliases, name.Name)
+				}
+			}
 			parents = append(parents, Location{
-				GeoID:    rel.Parent.Id.String(),
+				GeoID:    rel.ParentID.String(),
 				GeoLevel: rel.Parent.GeoLevel.Name,
-				Name:     "", // Name can be loaded if needed
-				Aliases:  []string{},
+				Name:     primaryName,
+				Aliases:  aliases,
 			})
 		}
 	}
@@ -190,6 +207,7 @@ func (service *ServiceOnPostgres) GetAllParents(ctx context.Context, geoID strin
 }
 
 // GetAllChildren returns all children of a location
+// TODO: Optimise: Use Join queries
 func (service *ServiceOnPostgres) GetAllChildren(ctx context.Context, geoID string) ([]Location, error) {
 	id, err := uuidFromString(geoID)
 	if err != nil {
@@ -202,11 +220,24 @@ func (service *ServiceOnPostgres) GetAllChildren(ctx context.Context, geoID stri
 	var children []Location
 	for _, rel := range relations {
 		if rel.Child != nil {
+			var primaryName string
+			var aliases []string
+			names, err := service.db.GetNameMapByLocationID(ctx, rel.ChildID)
+			if err != nil {
+				return nil, err
+			}
+			for _, name := range names {
+				if name.IsPrimary {
+					primaryName = name.Name
+				} else {
+					aliases = append(aliases, name.Name)
+				}
+			}
 			children = append(children, Location{
-				GeoID:    rel.Child.Id.String(),
+				GeoID:    rel.ChildID.String(),
 				GeoLevel: rel.Child.GeoLevel.Name,
-				Name:     "", // Name can be loaded if needed
-				Aliases:  []string{},
+				Name:     primaryName,
+				Aliases:  aliases,
 			})
 		}
 	}
@@ -214,26 +245,30 @@ func (service *ServiceOnPostgres) GetAllChildren(ctx context.Context, geoID stri
 }
 
 // UpdateLocation updates a location by its geo ID
-func (service *ServiceOnPostgres) UpdateLocation(ctx context.Context, geoID string, name string) (Location, error) {
+func (service *ServiceOnPostgres) UpdateLocation(ctx context.Context, geoID string, name *string, geoLevel *string) (Location, error) {
 	id, err := uuidFromString(geoID)
 	if err != nil {
 		return Location{}, err
 	}
-	loc, err := service.db.UpdateLocation(ctx, id, nil, &name)
+	_, err = service.db.UpdateLocation(ctx, id, geoLevel, name)
+	if err != nil {
+		return Location{}, err
+	}
+	updatedLoc, err := service.db.GetLocation(ctx, id)
 	if err != nil {
 		return Location{}, err
 	}
 	return Location{
-		GeoID:    loc.Id.String(),
-		GeoLevel: loc.GeoLevel.Name,
-		Name:     name,
-		Aliases:  []string{},
+		GeoID:    updatedLoc.Id.String(),
+		GeoLevel: updatedLoc.GeoLevel,
+		Name:     updatedLoc.Name,
+		Aliases:  updatedLoc.Aliases,
 	}, nil
 }
 
 // UpdateGeoLevel updates a geo level by its name
-func (service *ServiceOnPostgres) UpdateGeoLevel(ctx context.Context, name string, rank *float64) error {
-	_, err := service.db.UpdateGeoLevel(ctx, name, "", rank)
+func (service *ServiceOnPostgres) UpdateGeoLevel(ctx context.Context, name string, newName *string, newRank *float64) error {
+	_, err := service.db.UpdateGeoLevel(ctx, name, newName, newRank)
 	return err
 }
 
@@ -243,7 +278,7 @@ func (service *ServiceOnPostgres) RemoveAlias(ctx context.Context, geoID string,
 	if err != nil {
 		return err
 	}
-	tx := service.db.DB.Begin()
+	tx := service.db.Begin()
 	if tx.Error != nil {
 		return tx.Error
 	}
@@ -270,7 +305,7 @@ func (service *ServiceOnPostgres) RemoveParent(ctx context.Context, geoID string
 	if err != nil {
 		return err
 	}
-	tx := service.db.DB.Begin()
+	tx := service.db.Begin()
 	if tx.Error != nil {
 		return tx.Error
 	}
@@ -295,36 +330,23 @@ func (service *ServiceOnPostgres) RemoveChildren(ctx context.Context, geoID stri
 	if err != nil {
 		return err
 	}
-	tx := service.db.DB.Begin()
+	relations, err := service.db.GetChildren(ctx, parentID)
+	if err != nil {
+		return err
+	}
+
+	tx := service.db.Begin()
 	if tx.Error != nil {
 		return tx.Error
 	}
 	store := &postgres.Store{DB: tx}
-	for _, child := range childGeoIDs {
-		childID, err := uuidFromString(child)
-		if err != nil {
-			tx.Rollback()
-			return err
-		}
-		relations, err := service.db.GetChildren(ctx, parentID)
-		if err != nil {
-			tx.Rollback()
-			return err
-		}
-		found := false
-		for _, rel := range relations {
-			if rel.ChildID == childID {
-				err := store.DeleteRelation(ctx, rel.Id)
-				if err != nil {
-					tx.Rollback()
-					return err
-				}
-				found = true
+	for _, rel := range relations {
+		if slices.Contains(childGeoIDs, rel.ChildID.String()) {
+			err := store.DeleteRelation(ctx, rel.Id)
+			if err != nil {
+				tx.Rollback()
+				return err
 			}
-		}
-		if !found {
-			tx.Rollback()
-			return fmt.Errorf("relation not found for parent %s and child %s", geoID, child)
 		}
 	}
 	return tx.Commit().Error

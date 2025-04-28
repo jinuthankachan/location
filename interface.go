@@ -4,9 +4,9 @@ import "context"
 
 type LocationService interface {
 	AddLocation(ctx context.Context, geoID string, geoLevel string, name string) (Location, error)
-	UpdateLocation(ctx context.Context, geoID string, name string) (Location, error)
+	UpdateLocation(ctx context.Context, geoID string, name *string, geoLevel *string) (Location, error)
 	AddGeoLevel(ctx context.Context, name string, rank *float64) error
-	UpdateGeoLevel(ctx context.Context, name string, rank *float64) error
+	UpdateGeoLevel(ctx context.Context, name string, newName *string, newRank *float64) error
 	AddAliasToLocation(ctx context.Context, geoID string, name string) error
 	RemoveAlias(ctx context.Context, geoID string, name string) error
 	AddParent(ctx context.Context, geoID string, parentGeoID string) error
