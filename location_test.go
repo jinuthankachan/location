@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/xaults/platform/location/internal/postgres" // To access error types like ErrGeoLevelNotExist
+	"github.com/xaults/platform/location/postgres" // To access error types like ErrRelationNotFound
 	pg "gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -226,7 +226,7 @@ func TestServiceOnPostgres_AddLocation(t *testing.T) {
 			geoLevel: "STATE", // Not created yet
 			locName:  "Test State",
 			wantErr:  true,
-			errType:  postgres.ErrGeoLevelNotExist,
+			errType:  postgres.ErrRelationNotFound,
 		},
 		{
 			// Note: AddLocation doesn't check for duplicate names currently
@@ -444,7 +444,7 @@ func TestServiceOnPostgres_AddParent(t *testing.T) {
 			childGeoID:  country.GeoID,
 			parentGeoID: country.GeoID,
 			wantErr:     true,
-			// errType: postgres.ErrRelationToSelf, // Not defined, check message
+			errType:     postgres.ErrSelfRelationNotAllowed,
 		},
 	}
 
@@ -561,7 +561,7 @@ func TestServiceOnPostgres_AddChildren(t *testing.T) {
 			parentGeoID: country.GeoID,
 			childGeoIDs: []string{country.GeoID},
 			wantErr:     true,
-			// errType: postgres.ErrRelationToSelf, // Not defined, check message
+			errType:     postgres.ErrSelfRelationNotAllowed,
 		},
 		{
 			name:        "empty children list",
@@ -876,7 +876,7 @@ func TestServiceOnPostgres_GetLocationsByPattern(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			locations, err := service.GetLocationsByPattern(ctx, tt.pattern)
+			locations, err := service.GetLocationsByPattern(ctx, tt.pattern, nil)
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -909,6 +909,7 @@ func TestServiceOnPostgres_GetLocationsByPattern(t *testing.T) {
 
 // Test GetAllParents and GetAllChildren requires relations to be set up
 func setupRelationsForHierarchyTest(t *testing.T, service *ServiceOnPostgres) (country, state, city Location) {
+
 	country = createTestLocation(t, service, "COUNTRY", "Test Country")
 	state = createTestLocation(t, service, "STATE", "Test State")
 	city = createTestLocation(t, service, "CITY", "Test City")
@@ -1196,7 +1197,7 @@ func TestServiceOnPostgres_UpdateLocation(t *testing.T) {
 			updateName:     nil,
 			updateGeoLevel: stringPtr("NON_EXISTENT_LEVEL"),
 			wantErr:        true,
-			errType:        postgres.ErrGeoLevelNotExist,
+			errType:        postgres.ErrRelationNotFound,
 		},
 		{
 			name:           "update non-existent location",
@@ -1252,7 +1253,7 @@ func TestServiceOnPostgres_UpdateLocation(t *testing.T) {
 					} else if errors.Is(err, tt.errType) {
 						assert.ErrorIs(t, err, tt.errType)
 					} else if currentGeoID != "not-a-uuid" {
-						if tt.errType == postgres.ErrGeoLevelNotExist || tt.errType == postgres.ErrNameRequired || tt.errType == postgres.ErrLocationNotFound {
+						if tt.errType == postgres.ErrRelationNotFound || tt.errType == postgres.ErrNameRequired || tt.errType == postgres.ErrLocationNotFound {
 							assert.ErrorContains(t, err, tt.errType.Error())
 						} else {
 							// Fallback for other potential errors if needed
@@ -1387,7 +1388,7 @@ func TestServiceOnPostgres_UpdateGeoLevel(t *testing.T) {
 			updateName:  stringPtr("NEW_NAME"),
 			updateRank:  nil,
 			wantErr:     true,
-			errType:     postgres.ErrGeoLevelNotExist,
+			errType:     postgres.ErrRelationNotFound,
 		},
 	}
 

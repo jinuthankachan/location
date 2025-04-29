@@ -2,7 +2,7 @@
 
 test-models:
 	go clean -testcache
-	go test -p 1 -v ./internal/postgres
+	go test -p 1 -v ./postgres/
 	docker compose -f test.docker-compose.yaml down -v 
 
 test:

@@ -61,7 +61,7 @@ func TestLocation_InsertLocation(t *testing.T) {
 			geoLevel: "INVALID",
 			locName:  "Test Location",
 			wantErr:  true,
-			errType:  ErrGeoLevelNotExist,
+			errType:  ErrRelationNotFound,
 		},
 	}
 
@@ -584,7 +584,7 @@ func TestLocation_GetLocationsByGeoLevelName(t *testing.T) {
 			wantIds:      []uuid.UUID{},
 			wantGeoLevel: "",
 			wantErr:      true,
-			errType:      ErrGeoLevelNotExist,
+			errType:      ErrRelationNotFound,
 		},
 		{
 			name:         "empty geo level name",

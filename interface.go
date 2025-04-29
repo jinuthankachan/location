@@ -16,7 +16,7 @@ type LocationService interface {
 	DeleteLocation(ctx context.Context, geoID string) error
 	GetLocation(ctx context.Context, geoID string) (*Location, error)
 	GetLocations(ctx context.Context, geoIDs []string) ([]Location, error)
-	GetLocationsByPattern(ctx context.Context, name string) ([]Location, error)
+	GetLocationsByPattern(ctx context.Context, name string, geoLevel *string) ([]Location, error)
 	GetAllParents(ctx context.Context, geoID string) ([]Location, error)
 	GetParentAtLevel(ctx context.Context, geoID string, geoLevel string) (*Location, error)
 	GetAllChildren(ctx context.Context, geoID string) ([]Location, error)

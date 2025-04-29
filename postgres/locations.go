@@ -50,7 +50,7 @@ func (s *Store) InsertLocation(ctx context.Context, geoLevelName string, name st
 		var geoLevel GeoLevel
 		if err := tx.Where("name = ?", strings.ToUpper(geoLevelName)).First(&geoLevel).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return ErrGeoLevelNotExist
+				return ErrRelationNotFound
 			}
 			return err
 		}
@@ -138,7 +138,7 @@ func (s *Store) SearchLocationsByPattern(ctx context.Context, pattern string, ge
 		Where("LOWER(name) LIKE LOWER(?) AND locations.deleted_at IS NULL", fmt.Sprintf("%%%s%%", pattern))
 
 	// Filter by geo level if provided
-	if geoLevelID != nil {
+	if geoLevelID != nil && *geoLevelID != uuid.Nil {
 		query = query.Where("locations.geo_level_id = ?", *geoLevelID)
 	}
 
@@ -198,7 +198,7 @@ func (s *Store) UpdateLocation(ctx context.Context, id uuid.UUID, geoLevelName *
 			var geoLevel GeoLevel
 			if err := tx.Where("name = ?", strings.ToUpper(*geoLevelName)).First(&geoLevel).Error; err != nil {
 				if errors.Is(err, gorm.ErrRecordNotFound) {
-					return ErrGeoLevelNotExist
+					return ErrRelationNotFound
 				}
 				return err
 			}
@@ -262,7 +262,7 @@ func (s *Store) GetLocationsByGeoLevelName(ctx context.Context, geoLevelName str
 	err := s.DB.WithContext(ctx).Where("name = ?", strings.ToUpper(geoLevelName)).First(&geoLevel).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrGeoLevelNotExist
+			return nil, ErrRelationNotFound
 		}
 		return nil, err
 	}

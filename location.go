@@ -2,10 +2,11 @@ package location
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 
-	"github.com/xaults/platform/location/internal/postgres"
+	"github.com/xaults/platform/location/postgres"
 	"gorm.io/gorm"
 
 	"github.com/google/uuid"
@@ -143,7 +144,7 @@ func (service *ServiceOnPostgres) GetLocations(ctx context.Context, geoIDs []str
 	for _, geoID := range geoIDs {
 		loc, err := service.GetLocation(ctx, geoID)
 		if err != nil {
-			return nil, err
+			return locations, err
 		}
 		locations = append(locations, *loc)
 	}
@@ -151,20 +152,46 @@ func (service *ServiceOnPostgres) GetLocations(ctx context.Context, geoIDs []str
 }
 
 // GetLocationsByPattern finds locations matching the pattern of the name or one of the aliases
-func (service *ServiceOnPostgres) GetLocationsByPattern(ctx context.Context, name string) ([]Location, error) {
-	results, err := service.db.SearchLocationsByPattern(ctx, name, nil)
-	if err != nil {
-		return nil, err
-	}
+func (service *ServiceOnPostgres) GetLocationsByPattern(ctx context.Context, name string, geoLevel *string) ([]Location, error) {
 	var out []Location
-	for _, loc := range results {
-		out = append(out, Location{
-			GeoID:    loc.Id.String(),
-			GeoLevel: loc.GeoLevel,
-			Name:     loc.Name,
-			Aliases:  loc.Aliases,
-		})
+	var geoLevelID *uuid.UUID
+	if geoLevel != nil {
+		geoLevelObject, err := service.db.GetGeoLevelByName(ctx, *geoLevel)
+		if err != nil {
+			return out, err
+		}
+		geoLevelID = &geoLevelObject.Id
 	}
+	names, err := service.db.SearchNamesByPattern(ctx, name)
+	if err != nil {
+		return out, err
+	}
+
+	aliases := make(map[uuid.UUID][]string)
+	nameMap := make(map[uuid.UUID]Location)
+	for _, name := range names {
+		if name.IsPrimary {
+			if geoLevelID != nil && name.Location.GeoLevelID != *geoLevelID {
+				continue
+			}
+			loc := name.Location
+			nameMap[loc.Id] = Location{
+				GeoID:    loc.Id.String(),
+				GeoLevel: loc.GeoLevelID.String(),
+				Name:     name.Name,
+				Aliases:  []string{},
+			}
+		} else {
+			aliases[name.LocationID] = append(aliases[name.LocationID], name.Name)
+		}
+	}
+	for locID, loc := range nameMap {
+		if alias, ok := aliases[locID]; ok {
+			loc.Aliases = alias
+		}
+		out = append(out, loc)
+	}
+
 	return out, nil
 }
 
@@ -365,15 +392,15 @@ func (service *ServiceOnPostgres) DeleteLocation(ctx context.Context, geoID stri
 
 // GetChildrenAtLevel returns the children of a location at a specific geo level.
 func (service *ServiceOnPostgres) GetChildrenAtLevel(ctx context.Context, geoID string, geoLevel string) ([]Location, error) {
+	var children []Location
 	id, err := uuidFromString(geoID)
 	if err != nil {
-		return nil, err
+		return children, err
 	}
 	relations, err := service.db.GetChildren(ctx, id)
 	if err != nil {
-		return nil, err
+		return children, err
 	}
-	var children []Location
 	for _, rel := range relations {
 		if rel.Child != nil && rel.Child.GeoLevel.Name == geoLevel {
 			children = append(children, Location{
@@ -411,5 +438,9 @@ func (service *ServiceOnPostgres) GetParentAtLevel(ctx context.Context, geoID st
 }
 
 func uuidFromString(s string) (uuid.UUID, error) {
-	return uuid.Parse(s)
+	uid, err := uuid.Parse(s)
+	if err != nil {
+		return uuid.Nil, errors.Join(err, fmt.Errorf("invalid UUID format"))
+	}
+	return uid, nil
 }

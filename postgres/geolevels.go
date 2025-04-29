@@ -113,6 +113,9 @@ func (s *Store) UpdateGeoLevel(ctx context.Context, name string, newName *string
 	// Convert names to uppercase for consistent operations
 	name = strings.ToUpper(name)
 	if newName != nil {
+		if *newName == "" {
+			return nil, ErrGeoLevelNameRequired
+		}
 		*newName = strings.ToUpper(*newName)
 		// Check if newName is properly uppercase
 		if *newName != strings.ToUpper(*newName) {

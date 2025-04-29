@@ -75,7 +75,7 @@ func (r *Relation) BeforeCreate(tx *gorm.DB) error {
 // InsertRelation inserts a new relation
 func (s *Store) InsertRelation(ctx context.Context, parentLocationID uuid.UUID, childLocationID uuid.UUID) (*Relation, error) {
 	if parentLocationID == childLocationID {
-		return nil, errors.New("parent and child cannot be the same location")
+		return nil, ErrSelfRelationNotAllowed
 	}
 
 	relation := &Relation{

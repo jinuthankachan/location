@@ -13,11 +13,11 @@ import (
 
 func setupTestDB(t *testing.T) *Store {
 	// Check if the test postgres container is already running
-	psCmd := exec.Command("docker", "compose", "-f", "../../test.docker-compose.yaml", "ps", "--status=running")
+	psCmd := exec.Command("docker", "compose", "-f", "../test.docker-compose.yaml", "ps", "--status=running")
 	psOut, psErr := psCmd.Output()
 	if psErr != nil || !strings.Contains(string(psOut), "test-location-postgres") {
 		// Not running, so start the test postgres container using docker-compose
-		upCmd := exec.Command("docker", "compose", "-f", "../../test.docker-compose.yaml", "up", "-d", "--wait")
+		upCmd := exec.Command("docker", "compose", "-f", "../test.docker-compose.yaml", "up", "-d", "--wait")
 		err := upCmd.Run()
 		if err != nil {
 			t.Fatalf("Failed to start test postgres container: %v", err)
