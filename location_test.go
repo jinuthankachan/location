@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os/exec"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,7 +21,7 @@ func setupTestDB(t *testing.T) *ServiceOnPostgres {
 	// Check if the test postgres container is already running
 	psCmd := exec.Command("docker", "compose", "-f", "test.docker-compose.yaml", "ps", "--status=running")
 	psOut, psErr := psCmd.Output()
-	if psErr != nil || len(psOut) == 0 {
+	if psErr != nil || !strings.Contains(string(psOut), "test-location-postgres") {
 		// Not running, so start the test postgres container using docker-compose
 		upCmd := exec.Command("docker", "compose", "-f", "test.docker-compose.yaml", "up", "-d", "--wait")
 		err := upCmd.Run()
