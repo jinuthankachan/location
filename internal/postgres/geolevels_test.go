@@ -266,7 +266,7 @@ func TestGeoLevel_UpdateGeoLevel(t *testing.T) {
 		name  string
 		input struct {
 			name    string
-			newName string
+			newName *string
 			newRank *float64
 		}
 		wantErr bool
@@ -276,11 +276,11 @@ func TestGeoLevel_UpdateGeoLevel(t *testing.T) {
 			name: "update rank only",
 			input: struct {
 				name    string
-				newName string
+				newName *string
 				newRank *float64
 			}{
 				name:    "COUNTRY",
-				newName: "",
+				newName: nil,
 				newRank: float64Ptr(1.5),
 			},
 			wantErr: false,
@@ -289,11 +289,11 @@ func TestGeoLevel_UpdateGeoLevel(t *testing.T) {
 			name: "update name only",
 			input: struct {
 				name    string
-				newName string
+				newName *string
 				newRank *float64
 			}{
 				name:    "COUNTRY",
-				newName: "NATION",
+				newName: stringPtr("NATION"),
 				newRank: nil,
 			},
 			wantErr: false,
@@ -302,11 +302,11 @@ func TestGeoLevel_UpdateGeoLevel(t *testing.T) {
 			name: "update to existing name",
 			input: struct {
 				name    string
-				newName string
+				newName *string
 				newRank *float64
 			}{
 				name:    "NATION",
-				newName: "STATE",
+				newName: stringPtr("STATE"),
 				newRank: nil,
 			},
 			wantErr: true,
@@ -316,11 +316,11 @@ func TestGeoLevel_UpdateGeoLevel(t *testing.T) {
 			name: "update non-existent level",
 			input: struct {
 				name    string
-				newName string
+				newName *string
 				newRank *float64
 			}{
 				name:    "CITY",
-				newName: "TOWN",
+				newName: stringPtr("TOWN"),
 				newRank: nil,
 			},
 			wantErr: true,
@@ -330,11 +330,11 @@ func TestGeoLevel_UpdateGeoLevel(t *testing.T) {
 			name: "update with empty name",
 			input: struct {
 				name    string
-				newName string
+				newName *string
 				newRank *float64
 			}{
 				name:    "",
-				newName: "TEST",
+				newName: stringPtr("NEW_NAME"),
 				newRank: nil,
 			},
 			wantErr: true,
@@ -344,7 +344,7 @@ func TestGeoLevel_UpdateGeoLevel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			geoLevel, err := store.UpdateGeoLevel(ctx, tt.input.name, &tt.input.newName, tt.input.newRank)
+			geoLevel, err := store.UpdateGeoLevel(ctx, tt.input.name, tt.input.newName, tt.input.newRank)
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -357,16 +357,16 @@ func TestGeoLevel_UpdateGeoLevel(t *testing.T) {
 			assert.NoError(t, err)
 			assert.NotNil(t, geoLevel)
 
-			if tt.input.newName != "" {
-				assert.Equal(t, strings.ToUpper(tt.input.newName), geoLevel.Name)
+			if tt.input.newName != nil {
+				assert.Equal(t, strings.ToUpper(*tt.input.newName), geoLevel.Name)
 			}
 			if tt.input.newRank != nil {
 				assert.Equal(t, *tt.input.newRank, *geoLevel.Rank)
 			}
 
 			// Verify the update by getting the geo level
-			if tt.input.newName != "" {
-				updated, err := store.GetGeoLevelByName(ctx, tt.input.newName)
+			if tt.input.newName != nil {
+				updated, err := store.GetGeoLevelByName(ctx, *tt.input.newName)
 				assert.NoError(t, err)
 				assert.Equal(t, geoLevel.Id, updated.Id)
 			}
